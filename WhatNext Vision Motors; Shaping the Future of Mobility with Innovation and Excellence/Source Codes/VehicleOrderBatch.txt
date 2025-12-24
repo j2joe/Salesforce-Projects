@@ -1,0 +1,43 @@
+global class VehicleOrderBatch implements Database.BatchablesObject {
+ 
+    global Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator([
+            SELECT Id, Status__c, Vehicle__c FROM Vehicle_Order__c WHERE Status__c = 'Pending'
+        ]);
+    }
+ 
+    global void execute(Database.BatchableContext bc, ListVehicle_Order__c orderList) {
+        SetId vehicleIds = new SetId();
+        for (Vehicle_Order__c order  orderList) {
+            if (order.Vehicle__c != null) {
+                vehicleIds.add(order.Vehicle__c);
+            }
+        }
+ 
+        if (!vehicleIds.isEmpty()) {
+            MapId, Vehicle__c vehicleStockMap = new MapId, Vehicle__c(
+                [SELECT Id, Stock_Quantity__c FROM Vehicle__c WHERE Id IN vehicleIds]
+            );
+ 
+            ListVehicle_Order__c ordersToUpdate = new ListVehicle_Order__c();
+            ListVehicle__c vehiclesToUpdate = new ListVehicle__c();
+ 
+            for (Vehicle_Order__c order  orderList) {
+                Vehicle__c vehicle = vehicleStockMap.get(order.Vehicle__c);
+                if (vehicle != null && vehicle.Stock_Quantity__c  0) {
+                    order.Status__c = 'Confirmed';
+                    vehicle.Stock_Quantity__c -= 1;
+                    ordersToUpdate.add(order);
+                    vehiclesToUpdate.add(vehicle);
+                }
+            }
+ 
+            if (!ordersToUpdate.isEmpty()) update ordersToUpdate;
+            if (!vehiclesToUpdate.isEmpty()) update vehiclesToUpdate;
+        }
+    }
+ 
+    global void finish(Database.BatchableContext bc) {
+        System.debug('Vehicle order batch job completed.');
+    }
+}
